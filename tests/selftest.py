@@ -99,7 +99,8 @@ def test_e2e():
                         on_log=server_log.append,
                         on_clip_received=server_clip.append,
                         on_file_done=lambda n, ok, m: server_files_done.append((n, ok, m)),
-                        target_fps=10, jpeg_quality=70)
+                        target_fps=10, jpeg_quality=70,
+                        auto_firewall=False)   # 测试用随机端口，不修改本机防火墙
     assert server.start()
     time.sleep(0.3)
 
@@ -298,11 +299,24 @@ def test_elevation():
     check('提权 exe 路径非空', bool(exe), str(exe))
 
 
+def test_config():
+    print('== 0.8 配置检查 ==')
+    check('默认端口为 9100', common.DEFAULT_PORT == 9100, str(common.DEFAULT_PORT))
+    from desk_server import ensure_firewall_rule
+    check('防火墙放行函数存在', callable(ensure_firewall_rule))
+    # main.py 的端口回退必须引用 DEFAULT_PORT，禁止硬编码（否则改默认端口会失效）
+    with open(os.path.join(SRC, 'main.py'), 'r', encoding='utf-8') as f:
+        src = f.read()
+    check('main.py 端口回退使用 DEFAULT_PORT',
+          'or 5900' not in src and 'common.DEFAULT_PORT' in src, 'main.py')
+
+
 def main():
     test_imports()
     test_mapping()
     test_client_click()
     test_elevation()
+    test_config()
     test_protocol()
     test_e2e()
     print('\n结果：%d 通过，%d 失败' % (len(PASSED), len(FAILED)))

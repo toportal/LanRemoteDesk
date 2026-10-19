@@ -53,6 +53,32 @@ def get_local_ips():
     return sorted(ip for ip in ips if not ip.startswith('127.'))
 
 
+FIREWALL_RULE_NAME = 'LanRemoteDesk'
+
+
+def ensure_firewall_rule(port, rule_name=FIREWALL_RULE_NAME):
+    """尝试在 Windows 防火墙放行本监听端口的入站 TCP 规则。
+    注意：需要管理员权限；非管理员运行会返回 (False, 原因)，不影响监听本身。
+    每次先删除同名规则再添加，保证规则跟随当前端口且不重复堆积。"""
+    try:
+        import subprocess
+        create_no_window = 0x08000000   # 避免在无控制台程序中弹出黑框
+        # 先尝试删除同名规则（不存在时返回非 0，忽略）
+        subprocess.run(['netsh', 'advfirewall', 'firewall', 'delete', 'rule',
+                        'name=%s' % rule_name],
+                       capture_output=True, creationflags=create_no_window)
+        r = subprocess.run(['netsh', 'advfirewall', 'firewall', 'add', 'rule',
+                            'name=%s' % rule_name, 'dir=in', 'action=allow',
+                            'protocol=TCP', 'localport=%d' % int(port)],
+                           capture_output=True, creationflags=create_no_window)
+        if r.returncode == 0:
+            return True, ''
+        out = (r.stderr or r.stdout or b'').decode('gbk', errors='ignore')
+        return False, out.strip()[:120]
+    except Exception as e:
+        return False, str(e)
+
+
 class DeskServer(object):
     """
     被控端核心。
@@ -67,7 +93,8 @@ class DeskServer(object):
                  on_log=None, on_client_change=None,
                  on_file_progress=None, on_file_done=None,
                  on_clip_received=None,
-                 all_screens=False, scale=1.0, jpeg_quality=80, target_fps=12):
+                 all_screens=False, scale=1.0, jpeg_quality=80, target_fps=12,
+                 auto_firewall=True):
         self.password = password or generate_password()
         self.port = int(port)
         self.save_dir = save_dir or os.path.join(
@@ -84,6 +111,7 @@ class DeskServer(object):
         self.scale = scale
         self.jpeg_quality = int(jpeg_quality)
         self.target_fps = max(1, min(60, int(target_fps)))
+        self.auto_firewall = bool(auto_firewall)
 
         self._sock = None
         self._lock = threading.Lock()
@@ -113,7 +141,18 @@ class DeskServer(object):
         self.on_log('已监听端口 %d，等待控制端连接…' % self.port)
         threading.Thread(target=self._accept_loop, daemon=True).start()
         threading.Thread(target=self._clip_loop, daemon=True).start()
+        if self.auto_firewall:
+            threading.Thread(target=self._firewall_thread, daemon=True).start()
         return True
+
+    def _firewall_thread(self):
+        """后台尝试放行防火墙端口（需管理员权限；失败仅提示，不影响监听）。"""
+        ok, msg = ensure_firewall_rule(self.port)
+        if ok:
+            self.on_log('已自动在 Windows 防火墙放行入站 TCP %d' % self.port)
+        else:
+            self.on_log('提示：未能自动放行防火墙（需管理员权限）。'
+                        '若控制端连不上，请用管理员模式运行一次，或手动放行 TCP %d' % self.port)
 
     def stop(self):
         self._running = False

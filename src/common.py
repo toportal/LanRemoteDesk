@@ -18,7 +18,7 @@ from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import HKDF
 
 PROTO_VERSION = 1
-DEFAULT_PORT = 5900          # 默认监听端口（可在界面修改）
+DEFAULT_PORT = 9100          # 默认监听端口（界面可修改；避开 VNC 常用的 5900）
 MAX_FRAME = 128 * 1024 * 1024  # 单帧上限 128MB（文件分块也走帧）
 
 # 消息类型

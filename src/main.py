@@ -4,7 +4,7 @@
   无参数         启动主菜单
   -s [密码]      直接进入被控端模式（可省略密码，省略则随机生成并显示）
   -c             直接进入控制端模式
-  -p 端口        指定被控端端口（默认 5900）
+  -p 端口        指定被控端端口（默认 9100）
   -t             控制端连接被控端（IP:端口:密码，用于自动化/命令行场景）
 """
 import sys
@@ -32,10 +32,11 @@ def main():
         i += 1
 
     if argv.get('server'):
+        import common
         from ui_server import ServerWindow
         root = tk.Tk()
         ServerWindow(root, password=argv.get('password'),
-                     port=int(argv.get('port') or 5900))
+                     port=int(argv.get('port') or common.DEFAULT_PORT))
         root.mainloop()
     elif argv.get('client'):
         from ui_client import ClientWindow
