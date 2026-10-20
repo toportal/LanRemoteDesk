@@ -1,0 +1,45 @@
+name: Build Windows exe
+
+# 触发时机：
+#   1. 发布 Release：自动构建并把 exe 挂到该 Release 的下载区
+#   2. 手动触发：Actions 页面点 Run workflow，用于试跑验证（可从 Actions 页面下载 exe）
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+# 挂载资产到 Release 需要仓库写权限
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python 3.12（与本机 Win10/11 版一致）
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: pip install pycryptodome Pillow pyinstaller
+
+      - name: PyInstaller 打包单文件 exe
+        run: |
+          cd src
+          pyinstaller --onefile --windowed --name LanRemoteDesk main.py
+
+      - name: 保存构建产物（试跑时从 Actions 页面下载验证）
+        uses: actions/upload-artifact@v4
+        with:
+          name: LanRemoteDesk-exe
+          path: src/dist/LanRemoteDesk.exe
+
+      - name: 挂载 exe 到 Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src/dist/LanRemoteDesk.exe
